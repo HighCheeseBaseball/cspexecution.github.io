@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baseball Command Charting App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Cressey Logo -->
+        <div class="logo-container">
+            <img src="cressey_logo.png" alt="Cressey Sports Performance" class="cressey-logo">
+        </div>
+        
+        <!-- Pitcher Name Input -->
+        <div class="pitcher-info">
+            <label for="pitcher-name">Pitcher Name:</label>
+            <input type="text" id="pitcher-name" placeholder="Enter pitcher's name" maxlength="50">
+        </div>
+        
+        <!-- Overall Command Score -->
+        <div class="overall-command">
+            <h3>Overall Command Score</h3>
+            <div id="overall-score" class="command-score">
+                <span class="score-value">--</span>
+                <span class="score-grade">No pitches yet</span>
+            </div>
+        </div>
+        
+        <div class="pitch-type-selector">
+            <h3>Select Pitch Type:</h3>
+            <div class="pitch-buttons">
+                <button class="pitch-type-btn active" data-pitch="FS" data-color="darkred">Four-Seam</button>
+                <button class="pitch-type-btn" data-pitch="CH" data-color="darkgreen">ChangeUp</button>
+                <button class="pitch-type-btn" data-pitch="CB" data-color="blue">Curveball</button>
+                <button class="pitch-type-btn" data-pitch="CT" data-color="black">Cutter</button>
+                <button class="pitch-type-btn" data-pitch="KN" data-color="purple">Knuckleball</button>
+                <button class="pitch-type-btn" data-pitch="SI" data-color="orange">Sinker</button>
+                <button class="pitch-type-btn" data-pitch="SL" data-color="gold">Slider</button>
+                <button class="pitch-type-btn" data-pitch="SP" data-color="lightblue">Splitter</button>
+                <button class="pitch-type-btn" data-pitch="SW" data-color="darkgoldenrod">Sweeper</button>
+            </div>
+        </div>
+
+        <div class="baseball-field">
+            <!-- Strike Zone Grid (9 boxes) -->
+            <div class="strike-zone">
+                <div class="zone-box" data-zone="1"></div>
+                <div class="zone-box" data-zone="2"></div>
+                <div class="zone-box" data-zone="3"></div>
+                <div class="zone-box" data-zone="4"></div>
+                <div class="zone-box" data-zone="5"></div>
+                <div class="zone-box" data-zone="6"></div>
+                <div class="zone-box" data-zone="7"></div>
+                <div class="zone-box" data-zone="8"></div>
+                <div class="zone-box" data-zone="9"></div>
+            </div>
+            
+            <!-- Home Plate -->
+            <div class="home-plate"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="clear-pitch">Clear Current Pitch</button>
+            <button id="reset-all">Reset All</button>
+            <button id="show-plot">Show Pitch Plot</button>
+        </div>
+        
+        <div class="pitch-info">
+            <div id="current-pitch-status">Ready for catcher's glove position...</div>
+            <div id="distance-score" class="distance-score" style="display: none;"></div>
+            <div class="pitch-count">
+                <span>Pitch Count: <span id="pitch-counter">0</span></span>
+            </div>
+        </div>
+        
+        <div class="pitch-history">
+            <h3>Pitch History</h3>
+            <div id="history-list"></div>
+        </div>
+        
+        <!-- Command Breakdown by Pitch Type -->
+        <div class="command-breakdown">
+            <h3>Command Breakdown by Pitch Type</h3>
+            <div class="breakdown-table-container">
+                <table id="breakdown-table" class="breakdown-table">
+                    <thead>
+                        <tr>
+                            <th>Pitch Type</th>
+                            <th>Count</th>
+                            <th>Avg Distance</th>
+                            <th>Command Grade</th>
+                            <th>Best</th>
+                            <th>Worst</th>
+                        </tr>
+                    </thead>
+                    <tbody id="breakdown-body">
+                        <tr>
+                            <td colspan="6" class="no-data">No pitches recorded yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Export Controls -->
+        <div class="export-controls">
+            <h4>Export Data</h4>
+            <button id="export-csv">📊 Download CSV</button>
+            <button id="export-report">📋 Download Report (PDF)</button>
+        </div>
+        
+        <!-- Plot Visualization Modal -->
+        <div id="plot-modal" class="plot-modal" style="display: none;">
+            <div class="plot-modal-content">
+                <div class="plot-header">
+                    <h3>Pitch Command Visualization</h3>
+                    <button id="close-plot" class="close-plot">&times;</button>
+                </div>
+                <canvas id="pitch-plot" width="400" height="400"></canvas>
+                <div class="plot-legend">
+                    <h4>Legend:</h4>
+                    <div class="legend-item">
+                        <div class="legend-square"></div>
+                        <span>Catcher Target (Brown Squares)</span>
+                    </div>
+                    <div id="pitch-legend"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
