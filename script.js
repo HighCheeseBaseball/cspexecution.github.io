@@ -600,8 +600,8 @@ class BaseballChartingApp {
         const canvas = this.pitchPlotCanvas;
         const ctx = canvas.getContext('2d');
         
-        // Clear canvas with dark background
-        ctx.fillStyle = '#1a1a1a';
+        // Clear canvas with white background to match PDF
+        ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         // Calculate strike zone area (centered, with padding for outside pitches)
