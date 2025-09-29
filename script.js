@@ -1308,7 +1308,7 @@ class BaseballChartingApp {
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 32px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Cressey Sports Command Training', reportCanvas.width / 2, 60);
+        ctx.fillText('Cressey Sports Execution Trainer', reportCanvas.width / 2, 60);
         
         // Add pitcher name
         ctx.font = 'bold 24px Arial';
