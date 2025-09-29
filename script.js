@@ -9,6 +9,7 @@ class BaseballChartingApp {
         this.pitchCounter = 0;
         this.selectedPitchType = 'FS'; // Default to Four-Seam
         this.selectedPitchColor = 'darkred';
+        this.selectedHandedness = 'RHP'; // Default to Right-Handed Pitcher
         
         // Strike zone dimensions: 17" wide x 24" tall (approximate)
         // Our CSS strike zone is 306px wide x 306px tall (3 zones x 100px + 2px gaps)
@@ -46,8 +47,10 @@ class BaseballChartingApp {
         this.exportCSVButton = document.getElementById('export-csv');
         this.exportReportButton = document.getElementById('export-report');
         this.pitcherNameInput = document.getElementById('pitcher-name');
+        this.handednessButtons = document.querySelectorAll('.handedness-btn');
         
         this.setupEventListeners();
+        this.initializeHandedness();
         this.updateStatus();
     }
     
@@ -71,6 +74,11 @@ class BaseballChartingApp {
         // Pitch type buttons
         this.pitchTypeButtons.forEach(btn => {
             btn.addEventListener('click', (e) => this.selectPitchType(e));
+        });
+        
+        // Handedness buttons
+        this.handednessButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => this.selectHandedness(e));
         });
         
         // Close plot modal when clicking outside
@@ -268,7 +276,7 @@ class BaseballChartingApp {
             console.log('Fixed ball zone to:', this.currentPitch.ballLocation.zone);
         }
         
-        const score = this.getDistanceScore(distanceInches);
+        const score = this.getDistanceScore(distanceInches, this.selectedPitchType, this.selectedHandedness, this.currentPitch.catcherGlove.zone, this.currentPitch.ballLocation.zone, this.currentPitch.ballLocation.y);
         
         // Add to pitch history
         this.pitchCounter++;
@@ -277,6 +285,7 @@ class BaseballChartingApp {
             pitchType: this.selectedPitchType,
             pitchTypeName: this.getPitchTypeName(this.selectedPitchType),
             pitchColor: this.selectedPitchColor,
+            handedness: this.selectedHandedness,
             catcherGlove: { ...this.currentPitch.catcherGlove },
             ballLocation: { ...this.currentPitch.ballLocation },
             timestamp: new Date().toLocaleTimeString()
@@ -294,8 +303,8 @@ class BaseballChartingApp {
         this.updateOverallCommandScore();
         this.updateCommandBreakdown();
         
-        // Show completion message with actual distance and color-coded text
-        this.statusElement.textContent = `Pitch #${this.pitchCounter} - ${distanceInches.toFixed(1)}" - ${score.grade} | Ready for next pitch...`;
+        // Show completion message with 1-10 score and color-coded text
+        this.statusElement.textContent = `Pitch #${this.pitchCounter} - Score: ${score.score}/10 - ${score.grade} | Ready for next pitch...`;
         
         // Set color based on command grade
         switch(score.class) {
@@ -389,6 +398,28 @@ class BaseballChartingApp {
         this.selectedPitchColor = event.target.dataset.color;
     }
     
+    selectHandedness(event) {
+        // Remove active class from all handedness buttons
+        this.handednessButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to clicked button
+        event.target.classList.add('active');
+        
+        // Update selected handedness
+        this.selectedHandedness = event.target.dataset.hand;
+    }
+    
+    initializeHandedness() {
+        // Set RHP as default active button
+        this.handednessButtons.forEach(btn => {
+            if (btn.dataset.hand === 'RHP') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+    
     getPitchTypeName(code) {
         const pitchTypes = {
             'FS': 'Four-Seam',
@@ -420,15 +451,15 @@ class BaseballChartingApp {
         
         // Handle edge cases
         if (isNaN(distanceInches) || !isFinite(distanceInches)) {
-            this.distanceScoreElement.textContent = `Distance: 0.0" - Excellent Command`;
+            this.distanceScoreElement.textContent = `Distance: 0.0" - Excellent`;
             this.distanceScoreElement.className = `distance-score excellent`;
             this.distanceScoreElement.style.display = 'block';
             return;
         }
         
-        const score = this.getDistanceScore(distanceInches);
+        const score = this.getDistanceScore(distanceInches, this.selectedPitchType, this.selectedHandedness, this.currentPitch.catcherGlove.zone, this.currentPitch.ballLocation.zone, this.currentPitch.ballLocation.y);
         
-        this.distanceScoreElement.textContent = `Distance: ${distanceInches.toFixed(1)}" - ${score.grade}`;
+        this.distanceScoreElement.textContent = `Score: ${score.score}/10 - ${score.grade} (${distanceInches.toFixed(1)}") - ${score.reasoning}`;
         this.distanceScoreElement.className = `distance-score ${score.class}`;
         this.distanceScoreElement.style.display = 'block';
     }
@@ -486,18 +517,270 @@ class BaseballChartingApp {
         return isNaN(distance) ? 0 : distance;
     }
     
-    getDistanceScore(distanceInches) {
-        if (distanceInches < 6.0) {
-            return { grade: 'Excellent Command', class: 'excellent' };
-        } else if (distanceInches >= 6.0 && distanceInches < 10.0) {
-            return { grade: 'Good Command', class: 'good' };
-        } else if (distanceInches >= 10.0 && distanceInches < 14.0) {
-            return { grade: 'Average Command', class: 'average' };
-        } else if (distanceInches >= 14.0 && distanceInches <= 17.0) {
-            return { grade: 'Fair Command', class: 'fair' };
-        } else {
-            return { grade: 'Poor Command', class: 'poor' };
+    getDistanceScore(distanceInches, pitchType, handedness, catcherZone, ballZone, ballY = null) {
+        // Base distance score (1-10 scale)
+        let baseScore = this.getBaseDistanceScore(distanceInches);
+        
+        // Get zone analysis
+        const zoneAnalysis = this.analyzeZonePlacement(catcherZone, ballZone, ballY);
+        
+        // Get directional bonus/penalty based on pitch type and handedness
+        const directionalAdjustment = this.getDirectionalAdjustment(pitchType, handedness, zoneAnalysis);
+        
+        // Apply zone 5 penalty
+        const zone5Penalty = this.getZone5Penalty(ballZone);
+        
+        // Calculate final score
+        let finalScore = baseScore + directionalAdjustment - zone5Penalty;
+        finalScore = Math.max(1, Math.min(10, Math.round(finalScore))); // Clamp between 1-10
+        
+        // Get grade and class
+        const grade = this.getScoreGrade(finalScore);
+        const classType = this.getScoreClass(finalScore);
+        
+        return {
+            score: finalScore,
+            grade: grade,
+            class: classType,
+            distance: distanceInches,
+            baseScore: baseScore,
+            directionalBonus: directionalAdjustment,
+            zone5Penalty: zone5Penalty,
+            reasoning: this.getScoringReasoning(pitchType, handedness, zoneAnalysis, directionalAdjustment, zone5Penalty)
+        };
+    }
+    
+    getBaseDistanceScore(distanceInches) {
+        // Original distance-based scoring
+        if (distanceInches <= 2.0) return 10;
+        if (distanceInches <= 4.0) return 9;
+        if (distanceInches <= 6.0) return 8;
+        if (distanceInches <= 8.0) return 7;
+        if (distanceInches <= 10.0) return 6;
+        if (distanceInches <= 12.0) return 5;
+        if (distanceInches <= 14.0) return 4;
+        if (distanceInches <= 16.0) return 3;
+        if (distanceInches <= 18.0) return 2;
+        return 1;
+    }
+    
+    analyzeZonePlacement(catcherZone, ballZone, ballY = null) {
+        // Zone classifications
+        const topZones = [1, 2, 3];
+        const middleZones = [4, 5, 6];
+        const bottomZones = [7, 8, 9];
+        const leftZones = [1, 4, 7];
+        const centerZones = [2, 5, 8];
+        const rightZones = [3, 6, 9];
+        
+        // For middle zones, check if ball is in upper half of the zone
+        let isUpperHalfOfMiddle = false;
+        if (middleZones.includes(ballZone) && ballY !== null) {
+            // If ball is in middle zone and we have Y position, check if it's in upper half
+            // ballY is relative position within the zone (0-100), upper half would be 0-50
+            isUpperHalfOfMiddle = ballY <= 50;
         }
+        
+        return {
+            isTop: topZones.includes(ballZone),
+            isMiddle: middleZones.includes(ballZone),
+            isBottom: bottomZones.includes(ballZone),
+            isLeft: leftZones.includes(ballZone),
+            isCenter: centerZones.includes(ballZone),
+            isRight: rightZones.includes(ballZone),
+            isZone5: ballZone === 5,
+            isZone4: ballZone === 4,
+            isZone6: ballZone === 6,
+            isUpperHalf: topZones.includes(ballZone) || isUpperHalfOfMiddle, // Top row OR upper half of middle row
+            isLowerHalf: bottomZones.includes(ballZone) || (middleZones.includes(ballZone) && ballY !== null && ballY > 50) // Bottom row OR lower half of middle row
+        };
+    }
+    
+    getDirectionalAdjustment(pitchType, handedness, zoneAnalysis) {
+        if (handedness === 'LHP') {
+            return this.getLHPAdjustment(pitchType, zoneAnalysis);
+        } else {
+            return this.getRHPAdjustment(pitchType, zoneAnalysis);
+        }
+    }
+    
+    getLHPAdjustment(pitchType, zoneAnalysis) {
+        let adjustment = 0;
+        
+        switch (pitchType) {
+            case 'FS': // Four-Seam: reward up misses
+                if (zoneAnalysis.isTop) adjustment += 1.5;
+                break;
+                
+            case 'SI': // Sinker: reward down misses AND inside to LHB (left side)
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+                break;
+                
+            case 'CT': // Cutter: reward right side misses (inside to RHB)
+                if (zoneAnalysis.isRight) adjustment += 1.5;
+                break;
+                
+            case 'SL': // Slider: reward down and right misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3, 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'SW': // Sweeper: reward right and down misses
+                if (zoneAnalysis.isRight && zoneAnalysis.isBottom) adjustment += 2.0;
+                else if (zoneAnalysis.isRight || zoneAnalysis.isBottom) adjustment += 1.0;
+                break;
+                
+            case 'CB': // Curveball: reward down and right misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'CH': // ChangeUp: reward down and left misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'SP': // Splitter: reward down and left misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+        }
+        
+        return adjustment;
+    }
+    
+    getRHPAdjustment(pitchType, zoneAnalysis) {
+        let adjustment = 0;
+        
+        switch (pitchType) {
+            case 'FS': // Four-Seam: reward up misses
+                if (zoneAnalysis.isTop) adjustment += 1.5;
+                break;
+                
+            case 'SI': // Sinker: reward down misses AND inside to RHB (right side)
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+                break;
+                
+            case 'CT': // Cutter: reward left side misses (inside to LHB)
+                if (zoneAnalysis.isLeft) adjustment += 1.5;
+                break;
+                
+            case 'SL': // Slider: reward down and left misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'SW': // Sweeper: reward left and down misses
+                if (zoneAnalysis.isLeft && zoneAnalysis.isBottom) adjustment += 2.0;
+                else if (zoneAnalysis.isLeft || zoneAnalysis.isBottom) adjustment += 1.0;
+                break;
+                
+            case 'CB': // Curveball: reward down and left misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'CH': // ChangeUp: reward down and right misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+                
+            case 'SP': // Splitter: reward down and right misses, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+                // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
+                if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
+                break;
+        }
+        
+        return adjustment;
+    }
+    
+    getZone5Penalty(ballZone) {
+        return ballZone === 5 ? 2.0 : 0;
+    }
+    
+    getScoreGrade(score) {
+        if (score >= 8) return 'Excellent';
+        if (score >= 6) return 'Very Good';
+        if (score >= 5) return 'Average';
+        if (score >= 3) return 'Fair';
+        return 'Poor';
+    }
+    
+    getScoreClass(score) {
+        if (score >= 8) return 'excellent';
+        if (score >= 6) return 'good';
+        if (score >= 5) return 'average';
+        if (score >= 3) return 'fair';
+        return 'poor';
+    }
+    
+    getScoringReasoning(pitchType, handedness, zoneAnalysis, directionalAdjustment, zone5Penalty) {
+        let reasoning = [];
+        
+        if (zone5Penalty > 0) {
+            reasoning.push('Zone 5 penalty');
+        }
+        
+        if (directionalAdjustment > 0) {
+            reasoning.push('Good directional miss');
+        } else if (directionalAdjustment < 0) {
+            reasoning.push('Poor directional miss');
+        }
+        
+        // Add specific reasoning based on pitch type and zone
+        if (handedness === 'LHP') {
+            if (pitchType === 'SI' && zoneAnalysis.isBottom && zoneAnalysis.isLeft) {
+                reasoning.push('Sinker inside to LHB');
+            }
+            if (pitchType === 'SL' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Slider in upper half');
+            }
+            if (pitchType === 'CB' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Curveball in upper half');
+            }
+            if (pitchType === 'CH' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('ChangeUp in upper half');
+            }
+            if (pitchType === 'SP' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Splitter in upper half');
+            }
+        } else if (handedness === 'RHP') {
+            if (pitchType === 'SI' && zoneAnalysis.isBottom && zoneAnalysis.isRight) {
+                reasoning.push('Sinker inside to RHB');
+            }
+            if (pitchType === 'SL' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Slider in upper half');
+            }
+            if (pitchType === 'CB' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Curveball in upper half');
+            }
+            if (pitchType === 'CH' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('ChangeUp in upper half');
+            }
+            if (pitchType === 'SP' && zoneAnalysis.isUpperHalf) {
+                reasoning.push('Splitter in upper half');
+            }
+        }
+        
+        return reasoning.join(', ') || 'Standard scoring';
     }
     
     updatePitchCounter() {
@@ -516,12 +799,12 @@ class BaseballChartingApp {
             
             const distancePixels = this.calculateHistoricalDistance(pitch);
             const distanceInches = distancePixels / this.pixelsPerInch;
-            const score = this.getDistanceScore(distanceInches);
+            const score = this.getDistanceScore(distanceInches, pitch.pitchType, pitch.handedness, pitch.catcherGlove.zone, pitch.ballLocation.zone, pitch.ballLocation.y);
             
             entry.innerHTML = `
                 <div class="pitch-number">Pitch #${pitch.number} - ${pitch.pitchTypeName} - ${pitch.timestamp}</div>
                 <div class="pitch-details">
-                    <strong>Distance:</strong> ${distanceInches.toFixed(1)}" - ${score.grade}<br>
+                    <strong>Score:</strong> ${score.score}/10 - ${score.grade} (${distanceInches.toFixed(1)}")<br>
                     <strong>Catcher Target:</strong> Zone ${pitch.catcherGlove.zone}<br>
                     <strong>Ball Location:</strong> Zone ${pitch.ballLocation.zone}
                 </div>
@@ -732,23 +1015,40 @@ class BaseballChartingApp {
             return;
         }
         
-        // Calculate overall average distance
+        // Calculate average of individual enhanced scores
+        const totalScore = this.pitchHistory.reduce((sum, pitch) => {
+            const pixelDistance = this.calculateHistoricalDistance(pitch);
+            const inchDistance = pixelDistance / this.pixelsPerInch;
+            const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
+            const score = this.getDistanceScore(safeDistance, pitch.pitchType, pitch.handedness, pitch.catcherGlove.zone, pitch.ballLocation.zone, pitch.ballLocation.y);
+            return sum + score.score;
+        }, 0);
+        const avgScore = totalScore / this.pitchHistory.length;
+        const safeAvgScore = isNaN(avgScore) || !isFinite(avgScore) ? 0 : avgScore;
+        
+        // Calculate average distance for display
         const totalDistance = this.pitchHistory.reduce((sum, pitch) => {
             const pixelDistance = this.calculateHistoricalDistance(pitch);
             const inchDistance = pixelDistance / this.pixelsPerInch;
             const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
             return sum + safeDistance;
         }, 0);
-        
         const avgDistance = totalDistance / this.pitchHistory.length;
         const safeAvgDistance = isNaN(avgDistance) || !isFinite(avgDistance) ? 0 : avgDistance;
-        const overallGrade = this.getDistanceScore(safeAvgDistance);
         
-        scoreValueElement.textContent = `${safeAvgDistance.toFixed(1)}"`;
-        scoreGradeElement.textContent = overallGrade.grade;
+        const overallGrade = {
+            score: Math.round(safeAvgScore),
+            grade: this.getScoreGrade(safeAvgScore),
+            class: this.getScoreClass(safeAvgScore)
+        };
+        
+        // Use the score from the distance-based grade (not average of individual scores)
+        scoreValueElement.textContent = `${overallGrade.score}/10`;
+        scoreGradeElement.textContent = `Avg: ${safeAvgDistance.toFixed(1)}" - ${overallGrade.grade}`;
         scoreGradeElement.className = `score-grade ${overallGrade.class}`;
         
-        // Apply color styling
+        // Apply color styling to both score value and grade
+        this.applyGradeColor(scoreValueElement, overallGrade.class);
         this.applyGradeColor(scoreGradeElement, overallGrade.class);
     }
     
@@ -781,16 +1081,33 @@ class BaseballChartingApp {
                 return isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
             });
             
+            const scores = group.pitches.map(pitch => {
+                const pixelDistance = this.calculateHistoricalDistance(pitch);
+                const inchDistance = pixelDistance / this.pixelsPerInch;
+                const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
+                const score = this.getDistanceScore(safeDistance, pitch.pitchType, pitch.handedness, pitch.catcherGlove.zone, pitch.ballLocation.zone, pitch.ballLocation.y);
+                return score.score;
+            });
+            
             const avgDistance = distances.reduce((a, b) => a + b, 0) / distances.length;
+            const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+            const bestScore = Math.max(...scores);
+            const worstScore = Math.min(...scores);
             const bestDistance = Math.min(...distances);
             const worstDistance = Math.max(...distances);
             
             // Handle NaN in final calculations
             const safeAvgDistance = isNaN(avgDistance) || !isFinite(avgDistance) ? 0 : avgDistance;
+            const safeAvgScore = isNaN(avgScore) || !isFinite(avgScore) ? 0 : avgScore;
+            const safeBestScore = isNaN(bestScore) || !isFinite(bestScore) ? 0 : bestScore;
+            const safeWorstScore = isNaN(worstScore) || !isFinite(worstScore) ? 0 : worstScore;
             const safeBestDistance = isNaN(bestDistance) || !isFinite(bestDistance) ? 0 : bestDistance;
             const safeWorstDistance = isNaN(worstDistance) || !isFinite(worstDistance) ? 0 : worstDistance;
             
-            const grade = this.getDistanceScore(safeAvgDistance);
+            const grade = {
+                grade: this.getScoreGrade(safeAvgScore),
+                class: this.getScoreClass(safeAvgScore)
+            };
             
             // Calculate most common zones for catcher and pitch locations
             const catcherZones = {};
@@ -819,10 +1136,10 @@ class BaseballChartingApp {
                         ${group.name}
                     </td>
                     <td>${group.pitches.length}</td>
-                    <td>${safeAvgDistance.toFixed(1)}"</td>
+                    <td>${safeAvgScore.toFixed(1)}/10</td>
                     <td class="command-grade-cell ${grade.class}">${grade.grade}</td>
-                    <td>${safeBestDistance.toFixed(1)}"</td>
-                    <td>${safeWorstDistance.toFixed(1)}"</td>
+                    <td>${mostCommonCatcherZone}</td>
+                    <td>${mostCommonPitchZone}</td>
                 </tr>
             `;
         });
@@ -877,12 +1194,18 @@ class BaseballChartingApp {
             'Date',
             'Time',
             'Pitcher Name',
+            'Handedness',
             'Session Pitch #',
             'Pitch Type',
             'Catcher Target Zone',
             'Ball Location Zone',
             'Distance (inches)',
+            'Score (1-10)',
             'Command Grade',
+            'Base Score',
+            'Directional Bonus',
+            'Zone 5 Penalty',
+            'Scoring Reasoning',
             'Catcher X',
             'Catcher Y',
             'Ball X',
@@ -894,18 +1217,24 @@ class BaseballChartingApp {
             const distancePixels = this.calculateHistoricalDistance(pitch);
             const distanceInches = distancePixels / this.pixelsPerInch;
             const safeDistance = isNaN(distanceInches) || !isFinite(distanceInches) ? 0 : distanceInches;
-            const grade = this.getDistanceScore(safeDistance);
+            const grade = this.getDistanceScore(safeDistance, pitch.pitchType, pitch.handedness, pitch.catcherGlove.zone, pitch.ballLocation.zone, pitch.ballLocation.y);
             
             return [
                 currentDate,
                 currentTime,
                 pitcherName,
+                pitch.handedness,
                 pitch.number,
                 pitch.pitchTypeName,
                 pitch.catcherGlove.zone,
                 pitch.ballLocation.zone,
                 safeDistance.toFixed(1),
+                grade.score,
                 grade.grade,
+                grade.baseScore,
+                grade.directionalBonus,
+                grade.zone5Penalty,
+                grade.reasoning,
                 pitch.catcherGlove.x.toFixed(1),
                 pitch.catcherGlove.y.toFixed(1),
                 pitch.ballLocation.x.toFixed(1),
@@ -998,8 +1327,8 @@ class BaseballChartingApp {
         // Draw overall heatmap (top right) - same size as main plot
         this.drawHeatmap(ctx, 1100, 95, 'Overall Heatmap', this.pitchHistory);
         
-        // Draw breakdown table (middle, centered) - properly sized
-        this.drawBreakdownTable(ctx, 395, 600, 860); // Centered: (1650-860)/2 = 395
+        // Draw breakdown table (middle, centered) - better spacing
+        this.drawBreakdownTable(ctx, 475, 600, 700); // Centered: (1650-700)/2 = 475
         
         // Calculate dynamic position for pitch type zones based on table size
         const numPitchTypes = Object.keys(this.pitchHistory.reduce((groups, pitch) => {
@@ -1176,10 +1505,21 @@ class BaseballChartingApp {
         ctx.textAlign = 'center';
         ctx.fillText('Overall Command Stats', x + 200, y + 35);
         
+        // Calculate average score for display
+        const totalScore = this.pitchHistory.reduce((sum, pitch) => {
+            const pixelDistance = this.calculateHistoricalDistance(pitch);
+            const inchDistance = pixelDistance / this.pixelsPerInch;
+            const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
+            const score = this.getDistanceScore(safeDistance);
+            return sum + score.score;
+        }, 0);
+        const avgScore = totalScore / this.pitchHistory.length;
+        const safeAvgScore = isNaN(avgScore) || !isFinite(avgScore) ? 0 : avgScore;
+        
         // Add stats
         ctx.font = '20px Arial';
         ctx.fillText(`Total Pitches: ${this.pitchHistory.length}`, x + 200, y + 70);
-        ctx.fillText(`Average Distance: ${safeAvgDistance.toFixed(1)}"`, x + 200, y + 100);
+        ctx.fillText(`Average Score: ${safeAvgScore.toFixed(1)}/10`, x + 200, y + 100);
         ctx.fillText(`Overall Grade: ${overallGrade.grade}`, x + 200, y + 130);
         
         ctx.restore();
@@ -1206,12 +1546,12 @@ class BaseballChartingApp {
             pitchGroups[pitch.pitchType].pitches.push(pitch);
         });
         
-        // Table dimensions
-        const tableWidth = 860; // Increased to accommodate wider zone columns
-        const rowHeight = 40;
-        const headerHeight = 50;
-        // Adjusted column widths for 8 columns - zone columns need 100px each
-        const colWidths = [140, 80, 120, 160, 80, 80, 100, 100]; // Zone columns now 100px
+        // Table dimensions - accommodate wider last columns
+        const tableWidth = 700; // Adjusted width for better spacing
+        const rowHeight = 35;
+        const headerHeight = 45;
+        // Adjusted column widths for 6 columns - more space for last two columns
+        const colWidths = [120, 60, 100, 140, 140, 140]; // More space for last two columns
         
         // Draw table background
         ctx.fillStyle = '#ffffff';
@@ -1226,13 +1566,13 @@ class BaseballChartingApp {
         ctx.strokeRect(x, y, tableWidth, headerHeight);
         
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 18px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
         
-        const headers = ['Pitch Type', 'Count', 'Avg Distance', 'Command Grade', 'Best', 'Worst', 'C Zone', 'P Zone'];
+        const headers = ['Pitch Type', 'Count', 'Avg Score', 'Command Grade', 'Frequent C Zone', 'Frequent P Loc.'];
         let currentX = x;
         headers.forEach((header, i) => {
-            ctx.fillText(header, currentX + colWidths[i] / 2, y + 30);
+            ctx.fillText(header, currentX + colWidths[i] / 2, y + 28);
             currentX += colWidths[i];
         });
         
@@ -1246,11 +1586,18 @@ class BaseballChartingApp {
                 return isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
             });
             
+            const scores = distances.map(distance => this.getDistanceScore(distance).score);
             const avgDistance = distances.reduce((a, b) => a + b, 0) / distances.length;
+            const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+            const bestScore = Math.max(...scores);
+            const worstScore = Math.min(...scores);
             const bestDistance = Math.min(...distances);
             const worstDistance = Math.max(...distances);
             
             const safeAvgDistance = isNaN(avgDistance) || !isFinite(avgDistance) ? 0 : avgDistance;
+            const safeAvgScore = isNaN(avgScore) || !isFinite(avgScore) ? 0 : avgScore;
+            const safeBestScore = isNaN(bestScore) || !isFinite(bestScore) ? 0 : bestScore;
+            const safeWorstScore = isNaN(worstScore) || !isFinite(worstScore) ? 0 : worstScore;
             const safeBestDistance = isNaN(bestDistance) || !isFinite(bestDistance) ? 0 : bestDistance;
             const safeWorstDistance = isNaN(worstDistance) || !isFinite(worstDistance) ? 0 : worstDistance;
             
@@ -1283,15 +1630,13 @@ class BaseballChartingApp {
             
             // Draw row data
             ctx.fillStyle = '#000';
-            ctx.font = '16px Arial';
+            ctx.font = '14px Arial';
             
             const rowData = [
                 group.name,
                 group.pitches.length.toString(),
-                `${safeAvgDistance.toFixed(1)}"`,
+                `${safeAvgScore.toFixed(1)}/10`,
                 grade.grade,
-                `${safeBestDistance.toFixed(1)}"`,
-                `${safeWorstDistance.toFixed(1)}"`,
                 mostCommonCatcherZone,
                 mostCommonPitchZone
             ];
@@ -1316,12 +1661,12 @@ class BaseballChartingApp {
                     // Draw pitch type name (centered)
                     ctx.fillStyle = '#000';
                     ctx.textAlign = 'center';
-                    ctx.fillText(data, centerX, currentY + 25);
+                    ctx.fillText(data, centerX, currentY + 22);
                 } else {
                     // Regular text for other columns
                     ctx.fillStyle = '#000';
                     ctx.textAlign = 'center';
-                    ctx.fillText(data, currentX + colWidths[i] / 2, currentY + 25);
+                    ctx.fillText(data, currentX + colWidths[i] / 2, currentY + 22);
                 }
                 currentX += colWidths[i];
             });
@@ -1331,9 +1676,9 @@ class BaseballChartingApp {
         
         // Add table title (centered over table)
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 24px Arial';
+        ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Command Breakdown by Pitch Type', x + tableWidth / 2, y - 20);
+        ctx.fillText('Command Breakdown by Pitch Type', x + tableWidth / 2, y - 15);
         
         ctx.restore();
     }
@@ -1552,9 +1897,10 @@ class BaseballChartingApp {
         const gridSize = 100;
         const densityGrid = Array(gridSize).fill().map(() => Array(gridSize).fill(0));
         
-        // Convert pitch positions to heatmap coordinates and create density blobs
+        // Convert pitch positions to heatmap coordinates using actual x,y coordinates
         pitches.forEach(pitch => {
-            const ballPos = this.convertToHeatmapCoords(pitch.ballLocation, gridSize);
+            // Use the actual x,y coordinates from the pitch data
+            const ballPos = this.convertActualCoordsToHeatmap(pitch.ballLocation, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize);
             
             // Create larger density blobs with stronger Gaussian effect
             const radius = 12; // Larger radius for smoother blobs
@@ -1583,8 +1929,8 @@ class BaseballChartingApp {
             }
         }
         
-        // Draw heatmap with smooth blobs in inner zone area
-        const cellSize = innerZoneSize / gridSize;
+        // Draw heatmap with smooth blobs across the entire zone area (including outside 9-zone area)
+        const cellSize = zoneSize / gridSize; // Use full zone size, not just inner zone
         for (let row = 0; row < gridSize; row++) {
             for (let col = 0; col < gridSize; col++) {
                 const density = densityGrid[row][col];
@@ -1594,8 +1940,8 @@ class BaseballChartingApp {
                     
                     ctx.fillStyle = color;
                     ctx.fillRect(
-                        innerZoneX + col * cellSize,
-                        innerZoneY + row * cellSize,
+                        zoneStartX + col * cellSize, // Use zoneStartX instead of innerZoneX
+                        zoneStartY + row * cellSize, // Use zoneStartY instead of innerZoneY
                         cellSize,
                         cellSize
                     );
@@ -1629,6 +1975,30 @@ class BaseballChartingApp {
         }
         
         ctx.restore();
+    }
+    
+    convertActualCoordsToHeatmap(ballLocation, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize) {
+        // Convert actual x,y coordinates to heatmap grid coordinates
+        const zoneRow = Math.floor((ballLocation.zone - 1) / 3);
+        const zoneCol = (ballLocation.zone - 1) % 3;
+        
+        // Calculate the actual position within the heatmap using the same logic as the main plot
+        const boxSize = (innerZoneSize - 4) / 3; // Account for 2px gaps
+        const gap = 2;
+        
+        // Convert relative position (0-100) to actual pixel position within the zone
+        const relativeX = ballLocation.x / 100;
+        const relativeY = ballLocation.y / 100;
+        
+        // Calculate the actual pixel position in the heatmap
+        const actualX = innerZoneX + zoneCol * (boxSize + gap) + relativeX * boxSize;
+        const actualY = innerZoneY + zoneRow * (boxSize + gap) + relativeY * boxSize;
+        
+        // Convert to heatmap grid coordinates (scale to full zone area, not just inner zone)
+        const gridX = (actualX - zoneStartX) / zoneSize * gridSize;
+        const gridY = (actualY - zoneStartY) / zoneSize * gridSize;
+        
+        return { x: gridX, y: gridY };
     }
     
     convertToHeatmapCoords(ballLocation, gridSize) {

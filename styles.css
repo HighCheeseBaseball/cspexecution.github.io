@@ -76,6 +76,53 @@ h1 {
     box-shadow: 0 0 10px rgba(0,136,255,0.3);
 }
 
+/* Handedness Selector */
+.handedness-selector {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.handedness-selector label {
+    color: #ccc;
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.handedness-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.handedness-btn {
+    background: rgba(255,255,255,0.1);
+    border: 2px solid #666;
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: white;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 60px;
+}
+
+.handedness-btn:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: #ff6b35;
+    transform: translateY(-2px);
+}
+
+.handedness-btn.active {
+    background: #0066cc;
+    border-color: #0088ff;
+    color: white;
+    box-shadow: 0 0 10px rgba(0, 136, 255, 0.3);
+}
+
 .pitcher-info input::placeholder {
     color: #999;
 }
@@ -153,9 +200,10 @@ h1 {
 }
 
 .score-value {
-    font-size: 2em;
+    font-size: 3em;
     font-weight: bold;
     color: #fff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
 .score-grade {
@@ -164,6 +212,13 @@ h1 {
     padding: 5px 15px;
     border-radius: 20px;
     border: 2px solid #666;
+}
+
+.scoring-scale {
+    margin-top: 10px;
+    color: #999;
+    font-size: 0.9em;
+    text-align: center;
 }
 
 .baseball-field {

@@ -18,6 +18,13 @@
         <div class="pitcher-info">
             <label for="pitcher-name">Pitcher Name:</label>
             <input type="text" id="pitcher-name" placeholder="Enter pitcher's name" maxlength="50">
+            <div class="handedness-selector">
+                <label>Handedness:</label>
+                <div class="handedness-buttons">
+                    <button class="handedness-btn" data-hand="LHP">LHP</button>
+                    <button class="handedness-btn" data-hand="RHP">RHP</button>
+                </div>
+            </div>
         </div>
         
         <!-- Overall Command Score -->
@@ -26,6 +33,9 @@
             <div id="overall-score" class="command-score">
                 <span class="score-value">--</span>
                 <span class="score-grade">No pitches yet</span>
+            </div>
+            <div class="scoring-scale">
+                <small>8-10 = Excellent | 6-7 = Very Good | 5 = Average | 3-4 = Fair | 0-2 = Poor</small>
             </div>
         </div>
         
@@ -90,10 +100,10 @@
                         <tr>
                             <th>Pitch Type</th>
                             <th>Count</th>
-                            <th>Avg Distance</th>
+                            <th>Avg Score</th>
                             <th>Command Grade</th>
-                            <th>Best</th>
-                            <th>Worst</th>
+                            <th>Frequent C Zone</th>
+                            <th>Frequent P Loc.</th>
                         </tr>
                     </thead>
                     <tbody id="breakdown-body">
