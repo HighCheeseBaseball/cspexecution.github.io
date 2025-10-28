@@ -1318,31 +1318,38 @@ class BaseballChartingApp {
         ctx.font = '20px Arial';
         ctx.fillText(new Date().toLocaleDateString(), reportCanvas.width / 2, 130);
         
-        // Draw the pitch plot (left side) - bigger and right under title
-        this.drawReportPlot(ctx, 50, 95, 500, 500);
+        // Add overall stats (top left)
+        this.drawOverallStats(ctx, 50, 150);
         
-        // Add overall stats (top center) - properly centered
-        this.drawOverallStats(ctx, 625, 170);
+        // Draw pitch type heatmaps (centered on page)
+        this.drawPitchTypeHeatmaps(ctx, 50, 390);
         
-        // Draw overall heatmap (top right) - same size as main plot
-        this.drawHeatmap(ctx, 1100, 95, 'Overall Heatmap', this.pitchHistory);
-        
-        // Draw breakdown table (middle, centered) - better spacing
-        this.drawBreakdownTable(ctx, 475, 600, 700); // Centered: (1650-700)/2 = 475
-        
-        // Calculate dynamic position for pitch type zones based on table size
+        // Calculate position for breakdown table based on heatmap layout
         const numPitchTypes = Object.keys(this.pitchHistory.reduce((groups, pitch) => {
             groups[pitch.pitchType] = true;
             return groups;
         }, {})).length;
-        const tableRows = numPitchTypes;
-        const rowHeight = 40;
-        const headerHeight = 50;
-        const tableHeight = headerHeight + tableRows * rowHeight;
-        const zoneStartY = 600 + tableHeight + 50; // Table start + table height + 50px gap
         
-        // Draw individual pitch type strike zones (bottom, below table) - dynamic spacing
-        this.drawPitchTypeZones(ctx, 50, zoneStartY);
+        // Calculate how many pitch types fit per row horizontally
+        const canvasWidth = 1650;
+        const startX = 50;
+        const availableWidth = canvasWidth - (startX * 2);
+        const pairWidth = (260 * 2) + 3 + 12; // Two 260px heatmaps + gap (3) + spacing (12)
+        const pairsPerRow = Math.floor(availableWidth / pairWidth);
+        const numRows = Math.ceil(numPitchTypes / pairsPerRow);
+        
+        // Each heatmap is 260px + 45px for title = 305px total height
+        // Add spacing between rows if multiple rows
+        const heatmapHeight = 260;
+        const heatmapTitleHeight = 45;
+        const rowSpacing = numRows > 1 ? 10 : 0;
+        const heatmapStartY = 390; // Starting Y position for heatmaps
+        const totalHeatmapHeight = heatmapStartY + (heatmapHeight + heatmapTitleHeight) * numRows + (rowSpacing * (numRows - 1));
+        
+        const tableStartY = totalHeatmapHeight + 50; // Start table below heatmaps with 50px gap
+        
+        // Draw breakdown table (bottom, centered) - positioned after heatmaps
+        this.drawBreakdownTable(ctx, 475, tableStartY, 700); // Centered: (1650-700)/2 = 475
         
         // Convert to image and download as PNG (for now)
         reportCanvas.toBlob((blob) => {
@@ -1358,6 +1365,74 @@ class BaseballChartingApp {
         });
     }
     
+    
+    drawPitchTypeHeatmaps(ctx, startX, startY) {
+        if (this.pitchHistory.length === 0) {
+            return;
+        }
+        
+        // Group pitches by type
+        const pitchGroups = {};
+        this.pitchHistory.forEach(pitch => {
+            if (!pitchGroups[pitch.pitchType]) {
+                pitchGroups[pitch.pitchType] = {
+                    pitches: [],
+                    name: pitch.pitchTypeName
+                };
+            }
+            pitchGroups[pitch.pitchType].pitches.push(pitch);
+        });
+        
+        const pitchTypes = Object.keys(pitchGroups);
+        const numPitchTypes = pitchTypes.length;
+        
+        if (numPitchTypes === 0) {
+            return;
+        }
+        
+        // Size each heatmap to fit horizontally across the page
+        const heatmapSize = 260; // Bigger heatmaps
+        const titleHeight = 45; // Reduced title height for less whitespace
+        const spacing = 12; // Small space between different pitch types
+        const pairGap = 3; // Very close together for catcher and pitch location
+        
+        // Calculate if we need multiple rows
+        const canvasWidth = 1650;
+        const availableWidth = canvasWidth - (startX * 2); // Account for margins
+        const pairWidth = (heatmapSize * 2) + pairGap + spacing; // Two heatmaps + gap between them + spacing to next pair
+        const pairsPerRow = Math.floor(availableWidth / pairWidth);
+        const numRows = Math.ceil(numPitchTypes / pairsPerRow);
+        
+        // Calculate total width and center the heatmaps
+        const totalWidth = Math.min(numPitchTypes, pairsPerRow) * pairWidth;
+        const centerStartX = (canvasWidth - totalWidth) / 2; // Center horizontally
+        
+        let currentX = centerStartX;
+        let currentY = startY;
+        const heatmapPairHeight = heatmapSize + titleHeight;
+        
+        pitchTypes.forEach((pitchType, index) => {
+            const group = pitchGroups[pitchType];
+            const row = Math.floor(index / pairsPerRow);
+            
+            // Check if we need to start a new row
+            if (row > 0 && index % pairsPerRow === 0) {
+                currentX = centerStartX; // Use centered position for new rows
+                currentY += heatmapPairHeight + 10; // Move to next row - reduced spacing
+            }
+            
+            const heatmapY = currentY;
+            
+            // Draw catcher target heatmap (left)
+            this.drawHeatmap(ctx, currentX, heatmapY, `${group.name} - Catcher Target`, group.pitches, 'catcher');
+            
+            // Draw pitch location heatmap (right, really close to catcher)
+            this.drawHeatmap(ctx, currentX + heatmapSize + pairGap, heatmapY, `${group.name} - Pitch Location`, group.pitches, 'ball');
+            
+            // Move to next pair position
+            currentX += pairWidth;
+        });
+    }
     
     drawReportPlot(ctx, x, y, width, height) {
         // Save context
@@ -1852,7 +1927,7 @@ class BaseballChartingApp {
         return { x: canvasX, y: canvasY };
     }
     
-    drawHeatmap(ctx, x, y, title, pitches) {
+    drawHeatmap(ctx, x, y, title, pitches, locationType = 'ball') {
         ctx.save();
         
         if (pitches.length === 0) {
@@ -1860,16 +1935,16 @@ class BaseballChartingApp {
             return;
         }
         
-        const heatmapSize = 500; // Same size as main plot
+        const heatmapSize = 260; // Bigger size for better visibility
         
         // Draw title
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 24px Arial';
+        ctx.font = 'bold 14px Arial'; // Smaller font for compact layout
         ctx.textAlign = 'center';
-        ctx.fillText(title, x + heatmapSize / 2, y - 5);
+        ctx.fillText(title, x + heatmapSize / 2, y - 3);
         
-        // Draw background structure to match Pitch Command Plot
-        const padding = 60;
+        // Draw background structure - proportional padding for smaller heatmap
+        const padding = 30; // Reduced padding for compact size
         const zoneSize = heatmapSize - (padding * 2);
         const zoneStartX = x + padding;
         const zoneStartY = y + padding;
@@ -1880,11 +1955,11 @@ class BaseballChartingApp {
         
         // Draw outer border around entire strike zone (black for PDF)
         ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.strokeRect(zoneStartX, zoneStartY, zoneSize, zoneSize);
         
-        // Draw inner strike zone (9-box area)
-        const innerPadding = 60;
+        // Draw inner strike zone (9-box area) - proportional padding
+        const innerPadding = 10; // Minimal padding for compact layout
         const innerZoneSize = zoneSize - (innerPadding * 2);
         const innerZoneX = zoneStartX + innerPadding;
         const innerZoneY = zoneStartY + innerPadding;
@@ -1899,13 +1974,14 @@ class BaseballChartingApp {
         
         // Convert pitch positions to heatmap coordinates using actual x,y coordinates
         pitches.forEach(pitch => {
-            // Use the actual x,y coordinates from the pitch data
-            const ballPos = this.convertActualCoordsToHeatmap(pitch.ballLocation, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize);
+            // Use the location type to determine which position to plot
+            const positionData = locationType === 'catcher' ? pitch.catcherGlove : pitch.ballLocation;
+            const ballPos = this.convertActualCoordsToHeatmap(positionData, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize);
             
-            // Create larger density blobs with stronger Gaussian effect
-            const radius = 12; // Larger radius for smoother blobs
+            // Create density blobs with Gaussian effect - adjusted for compact heatmap
+            const radius = 8; // Radius for smooth blobs
             const intensity = 1;
-            const sigma = 4; // Wider spread for smoother gradients
+            const sigma = 3; // Spread for smooth gradients
             
             for (let dy = -radius; dy <= radius; dy++) {
                 for (let dx = -radius; dx <= radius; dx++) {
@@ -1929,19 +2005,19 @@ class BaseballChartingApp {
             }
         }
         
-        // Draw heatmap with smooth blobs across the entire zone area (including outside 9-zone area)
-        const cellSize = zoneSize / gridSize; // Use full zone size, not just inner zone
+        // Draw heatmap with smooth blobs across the entire zone area
+        const cellSize = zoneSize / gridSize; // Use full zone size
         for (let row = 0; row < gridSize; row++) {
             for (let col = 0; col < gridSize; col++) {
                 const density = densityGrid[row][col];
-                if (density > 0.02) { // Show even lower-level density for smoother gradients
+                if (density > 0.01) { // Show lower-level density for smooth gradients
                     const intensity = Math.min(density / maxDensity, 1);
                     const color = this.getHeatmapColor(intensity);
                     
                     ctx.fillStyle = color;
                     ctx.fillRect(
-                        zoneStartX + col * cellSize, // Use zoneStartX instead of innerZoneX
-                        zoneStartY + row * cellSize, // Use zoneStartY instead of innerZoneY
+                        zoneStartX + col * cellSize,
+                        zoneStartY + row * cellSize,
                         cellSize,
                         cellSize
                     );
@@ -1962,15 +2038,15 @@ class BaseballChartingApp {
                 
                 // Draw box border (black for PDF)
                 ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 1;
                 ctx.strokeRect(boxX, boxY, boxSize, boxSize);
                 
                 // Draw zone numbers (black for PDF)
                 ctx.fillStyle = '#000000';
-                ctx.font = '14px Arial';
+                ctx.font = 'bold 10px Arial'; // Smaller font for compact layout
                 ctx.textAlign = 'left';
                 const zoneNum = row * 3 + col + 1;
-                ctx.fillText(zoneNum.toString(), boxX + 5, boxY + 18);
+                ctx.fillText(zoneNum.toString(), boxX + 3, boxY + 12);
             }
         }
         
