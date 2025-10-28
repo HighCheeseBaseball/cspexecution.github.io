@@ -1334,14 +1334,14 @@ class BaseballChartingApp {
         const canvasWidth = 1650;
         const startX = 50;
         const availableWidth = canvasWidth - (startX * 2);
-        const pairWidth = (260 * 2) + 3 + 12; // Two 260px heatmaps + gap (3) + spacing (12)
+        const pairWidth = (300 * 2) + 4 + 15; // Two 300px heatmaps + gap (4) + spacing (15)
         const pairsPerRow = Math.floor(availableWidth / pairWidth);
         const numRows = Math.ceil(numPitchTypes / pairsPerRow);
         
-        // Each heatmap is 260px + 45px for title = 305px total height
+        // Each heatmap is 300px + 50px for title = 350px total height
         // Add spacing between rows if multiple rows
-        const heatmapHeight = 260;
-        const heatmapTitleHeight = 45;
+        const heatmapHeight = 300;
+        const heatmapTitleHeight = 50;
         const rowSpacing = numRows > 1 ? 10 : 0;
         const heatmapStartY = 390; // Starting Y position for heatmaps
         const totalHeatmapHeight = heatmapStartY + (heatmapHeight + heatmapTitleHeight) * numRows + (rowSpacing * (numRows - 1));
@@ -1391,10 +1391,10 @@ class BaseballChartingApp {
         }
         
         // Size each heatmap to fit horizontally across the page
-        const heatmapSize = 260; // Bigger heatmaps
-        const titleHeight = 45; // Reduced title height for less whitespace
-        const spacing = 12; // Small space between different pitch types
-        const pairGap = 3; // Very close together for catcher and pitch location
+        const heatmapSize = 300; // Larger heatmaps
+        const titleHeight = 50; // Title height
+        const spacing = 15; // Small space between different pitch types
+        const pairGap = 4; // Very close together for catcher and pitch location
         
         // Calculate if we need multiple rows
         const canvasWidth = 1650;
@@ -1935,7 +1935,7 @@ class BaseballChartingApp {
             return;
         }
         
-        const heatmapSize = 260; // Bigger size for better visibility
+        const heatmapSize = 300; // Larger size for better visibility
         
         // Draw title
         ctx.fillStyle = '#000';
