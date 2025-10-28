@@ -1318,8 +1318,8 @@ class BaseballChartingApp {
         ctx.font = '20px Arial';
         ctx.fillText(new Date().toLocaleDateString(), reportCanvas.width / 2, 130);
         
-        // Add overall stats (top left)
-        this.drawOverallStats(ctx, 50, 150);
+        // Add overall stats (top left, aligned with title)
+        this.drawOverallStats(ctx, 50, 60);
         
         // Draw pitch type heatmaps (centered on page)
         this.drawPitchTypeHeatmaps(ctx, 50, 390);
