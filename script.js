@@ -1310,19 +1310,56 @@ class BaseballChartingApp {
         ctx.textAlign = 'center';
         ctx.fillText('Cressey Sports Execution Trainer', reportCanvas.width / 2, 60);
         
-        // Add pitcher name
-        ctx.font = 'bold 24px Arial';
-        ctx.fillText(pitcherName, reportCanvas.width / 2, 100);
+        // Compute overall command score (match main page)
+        const totalScoreForName = this.pitchHistory.reduce((sum, pitch) => {
+            const pixelDistance = this.calculateHistoricalDistance(pitch);
+            const inchDistance = pixelDistance / this.pixelsPerInch;
+            const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
+            const score = this.getDistanceScore(
+                safeDistance,
+                pitch.pitchType,
+                pitch.handedness,
+                pitch.catcherGlove.zone,
+                pitch.ballLocation.zone,
+                pitch.ballLocation.y
+            );
+            return sum + score.score;
+        }, 0);
+        const avgScoreForName = this.pitchHistory.length > 0 ? (totalScoreForName / this.pitchHistory.length) : 0;
+        const roundedAvgScore = Math.round(avgScoreForName);
+        const gradeText = this.getScoreGrade(avgScoreForName);
+        const classTypeForName = this.getScoreClass(avgScoreForName);
+        const gradeColors = { excellent: '#00ff00', good: '#0066ff', average: '#ffff00', fair: '#ff8800', poor: '#ff0000' };
+        const gradeColor = gradeColors[classTypeForName] || '#000000';
         
-        // Add date (without time)
-        ctx.font = '20px Arial';
-        ctx.fillText(new Date().toLocaleDateString(), reportCanvas.width / 2, 130);
+        // Top info row: Overall (left), Pitcher Name (center), Date (right)
+        const rowY = 100;
         
-        // Add overall stats (top left, aligned with title)
-        this.drawOverallStats(ctx, 50, 60);
+        // Overall score (colored)
+        ctx.textAlign = 'left';
+        ctx.fillStyle = gradeColor;
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText(`Overall: ${roundedAvgScore}/10 - ${gradeText}`, 50, rowY);
         
-        // Draw pitch type heatmaps (centered on page)
-        this.drawPitchTypeHeatmaps(ctx, 50, 390);
+        // Pitcher name (black, centered)
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText(pitcherName, reportCanvas.width / 2, rowY);
+        
+        // Date (right-aligned, black)
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 18px Arial';
+        ctx.fillText(new Date().toLocaleDateString(), reportCanvas.width - 50, rowY);
+        
+        // Reset alignment to center for later titles
+        ctx.textAlign = 'center';
+        
+        // Removed stats box; overall shown in top left
+        
+        // Draw pitch type heatmaps higher up
+        this.drawPitchTypeHeatmaps(ctx, 50, 150);
         
         // Calculate position for breakdown table based on heatmap layout
         const numPitchTypes = Object.keys(this.pitchHistory.reduce((groups, pitch) => {
@@ -1330,39 +1367,67 @@ class BaseballChartingApp {
             return groups;
         }, {})).length;
         
-        // Calculate how many pitch types fit per row horizontally
+        // Calculate how many pitch types fit per row horizontally (use fixed sizing here
+        // to avoid scope issues with drawPitchTypeHeatmaps' internals)
         const canvasWidth = 1650;
-        const startX = 50;
+        const startX = 32;
         const availableWidth = canvasWidth - (startX * 2);
-        const pairWidth = (300 * 2) + 4 + 15; // Two 300px heatmaps + gap (4) + spacing (15)
-        const pairsPerRow = Math.floor(availableWidth / pairWidth);
+        const HEATMAP_SIZE = 250;
+        const TITLE_HEIGHT = 50;
+        const PAIR_GAP = 2; // gap within a pitch type pair
+        const SPACING_X = 20; // spacing between different pitch types
+        const SPACING_Y = 10; // vertical spacing between rows
+        const pairWidth = (HEATMAP_SIZE * 2) + PAIR_GAP + SPACING_X;
+        const usableWidth = Math.max(0, availableWidth + SPACING_X);
+        const pairsPerRow = Math.max(1, Math.floor(usableWidth / pairWidth));
         const numRows = Math.ceil(numPitchTypes / pairsPerRow);
         
-        // Each heatmap is 300px + 50px for title = 350px total height
-        // Add spacing between rows if multiple rows
-        const heatmapHeight = 300;
-        const heatmapTitleHeight = 50;
-        const rowSpacing = numRows > 1 ? 10 : 0;
-        const heatmapStartY = 390; // Starting Y position for heatmaps
-        const totalHeatmapHeight = heatmapStartY + (heatmapHeight + heatmapTitleHeight) * numRows + (rowSpacing * (numRows - 1));
+        // Each heatmap + title for vertical height (fixed values)
+        const heatmapHeight = HEATMAP_SIZE;
+        const heatmapTitleHeight = TITLE_HEIGHT;
+        const rowSpacing = numRows > 1 ? SPACING_Y : 0;
+        const heatmapStartY = 150; // Starting Y position for heatmaps
+        const totalHeatmapHeight = heatmapStartY + numRows * (heatmapHeight + heatmapTitleHeight + SPACING_Y);
         
         const tableStartY = totalHeatmapHeight + 50; // Start table below heatmaps with 50px gap
         
         // Draw breakdown table (bottom, centered) - positioned after heatmaps
         this.drawBreakdownTable(ctx, 475, tableStartY, 700); // Centered: (1650-700)/2 = 475
         
-        // Convert to image and download as PNG (for now)
-        reportCanvas.toBlob((blob) => {
+        // Helper to trigger download
+        const triggerDownload = (href) => {
             const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
+            link.setAttribute('href', href);
             const fileName = pitcherName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             link.setAttribute('download', `${fileName}_command_report_${new Date().toISOString().split('T')[0]}.png`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-        });
+        };
+
+        // Convert to image and download as PNG (robust across browsers)
+        try {
+            if (reportCanvas.toBlob) {
+                reportCanvas.toBlob((blob) => {
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        triggerDownload(url);
+                        URL.revokeObjectURL(url);
+                    } else {
+                        // Fallback if blob is null
+                        const dataUrl = reportCanvas.toDataURL('image/png');
+                        triggerDownload(dataUrl);
+                    }
+                }, 'image/png');
+            } else {
+                const dataUrl = reportCanvas.toDataURL('image/png');
+                triggerDownload(dataUrl);
+            }
+        } catch (e) {
+            const dataUrl = reportCanvas.toDataURL('image/png');
+            triggerDownload(dataUrl);
+        }
     }
     
     
@@ -1377,7 +1442,8 @@ class BaseballChartingApp {
             if (!pitchGroups[pitch.pitchType]) {
                 pitchGroups[pitch.pitchType] = {
                     pitches: [],
-                    name: pitch.pitchTypeName
+                    name: pitch.pitchTypeName,
+                    color: pitch.pitchColor
                 };
             }
             pitchGroups[pitch.pitchType].pitches.push(pitch);
@@ -1390,47 +1456,31 @@ class BaseballChartingApp {
             return;
         }
         
-        // Size each heatmap to fit horizontally across the page
-        const heatmapSize = 300; // Larger heatmaps
-        const titleHeight = 50; // Title height
-        const spacing = 15; // Small space between different pitch types
-        const pairGap = 4; // Very close together for catcher and pitch location
-        
-        // Calculate if we need multiple rows
-        const canvasWidth = 1650;
-        const availableWidth = canvasWidth - (startX * 2); // Account for margins
-        const pairWidth = (heatmapSize * 2) + pairGap + spacing; // Two heatmaps + gap between them + spacing to next pair
-        const pairsPerRow = Math.floor(availableWidth / pairWidth);
-        const numRows = Math.ceil(numPitchTypes / pairsPerRow);
-        
-        // Calculate total width and center the heatmaps
-        const totalWidth = Math.min(numPitchTypes, pairsPerRow) * pairWidth;
-        const centerStartX = (canvasWidth - totalWidth) / 2; // Center horizontally
-        
-        let currentX = centerStartX;
-        let currentY = startY;
-        const heatmapPairHeight = heatmapSize + titleHeight;
-        
+        // Fixed sizing and deterministic grid to eliminate overlap
+        const heatmapSize = 250; // Strike zone square size
+        const titleHeight = 50;  // Title row height used in spacing
+        const typeSpacingX = 20; // Space between different pitch types (horizontal)
+        const pairGap = 2;       // Space between catcher/pitch within the same type
+        const typeSpacingY = 10; // Vertical space between rows
+
+        // Compute how many pitch types fit per row based on canvas width
+        const canvasWidth = ctx.canvas && ctx.canvas.width ? ctx.canvas.width : 1650;
+        const pairWidth = heatmapSize * 2 + pairGap + typeSpacingX;
+        const usableWidth = Math.max(0, canvasWidth - startX * 2 + typeSpacingX);
+        const pairsPerRow = Math.max(1, Math.floor(usableWidth / pairWidth));
+
         pitchTypes.forEach((pitchType, index) => {
             const group = pitchGroups[pitchType];
+            const col = index % pairsPerRow;
             const row = Math.floor(index / pairsPerRow);
-            
-            // Check if we need to start a new row
-            if (row > 0 && index % pairsPerRow === 0) {
-                currentX = centerStartX; // Use centered position for new rows
-                currentY += heatmapPairHeight + 10; // Move to next row - reduced spacing
-            }
-            
-            const heatmapY = currentY;
-            
-            // Draw catcher target heatmap (left)
-            this.drawHeatmap(ctx, currentX, heatmapY, `${group.name} - Catcher Target`, group.pitches, 'catcher');
-            
-            // Draw pitch location heatmap (right, really close to catcher)
-            this.drawHeatmap(ctx, currentX + heatmapSize + pairGap, heatmapY, `${group.name} - Pitch Location`, group.pitches, 'ball');
-            
-            // Move to next pair position
-            currentX += pairWidth;
+
+            const pairX = startX + col * pairWidth;
+            const pairY = startY + row * (heatmapSize + titleHeight + typeSpacingY);
+
+            // Draw catcher target (left of pair)
+            this.drawHeatmap(ctx, pairX, pairY, `${group.name} - Catcher Target`, group.pitches, 'catcher', heatmapSize, group.color);
+            // Draw pitch location (right of pair)
+            this.drawHeatmap(ctx, pairX + heatmapSize + pairGap, pairY, `${group.name} - Pitch Location`, group.pitches, 'ball', heatmapSize, group.color);
         });
     }
     
@@ -1555,7 +1605,7 @@ class BaseballChartingApp {
     drawOverallStats(ctx, x, y) {
         ctx.save();
         
-        // Calculate overall stats
+        // Calculate overall stats (match main page logic: average of enhanced per-pitch scores)
         const totalDistance = this.pitchHistory.reduce((sum, pitch) => {
             const pixelDistance = this.calculateHistoricalDistance(pitch);
             const inchDistance = pixelDistance / this.pixelsPerInch;
@@ -1565,7 +1615,6 @@ class BaseballChartingApp {
         
         const avgDistance = totalDistance / this.pitchHistory.length;
         const safeAvgDistance = isNaN(avgDistance) || !isFinite(avgDistance) ? 0 : avgDistance;
-        const overallGrade = this.getDistanceScore(safeAvgDistance);
         
         // Draw stats box
         ctx.fillStyle = '#f0f0f0';
@@ -1585,11 +1634,19 @@ class BaseballChartingApp {
             const pixelDistance = this.calculateHistoricalDistance(pitch);
             const inchDistance = pixelDistance / this.pixelsPerInch;
             const safeDistance = isNaN(inchDistance) || !isFinite(inchDistance) ? 0 : inchDistance;
-            const score = this.getDistanceScore(safeDistance);
+            const score = this.getDistanceScore(
+                safeDistance,
+                pitch.pitchType,
+                pitch.handedness,
+                pitch.catcherGlove.zone,
+                pitch.ballLocation.zone,
+                pitch.ballLocation.y
+            );
             return sum + score.score;
         }, 0);
         const avgScore = totalScore / this.pitchHistory.length;
         const safeAvgScore = isNaN(avgScore) || !isFinite(avgScore) ? 0 : avgScore;
+        const overallGrade = { grade: this.getScoreGrade(safeAvgScore) };
         
         // Add stats
         ctx.font = '20px Arial';
@@ -1927,7 +1984,7 @@ class BaseballChartingApp {
         return { x: canvasX, y: canvasY };
     }
     
-    drawHeatmap(ctx, x, y, title, pitches, locationType = 'ball') {
+    drawHeatmap(ctx, x, y, title, pitches, locationType = 'ball', customSize = null, titleColor = null) {
         ctx.save();
         
         if (pitches.length === 0) {
@@ -1935,16 +1992,16 @@ class BaseballChartingApp {
             return;
         }
         
-        const heatmapSize = 300; // Larger size for better visibility
+        const heatmapSize = customSize || 300; // Allow caller to control size
         
         // Draw title
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = titleColor || '#000';
         ctx.font = 'bold 14px Arial'; // Smaller font for compact layout
         ctx.textAlign = 'center';
         ctx.fillText(title, x + heatmapSize / 2, y - 3);
         
-        // Draw background structure - proportional padding for smaller heatmap
-        const padding = 30; // Reduced padding for compact size
+        // Draw background structure - reduced outer padding
+        const padding = 10; // Reduced padding so pair gap looks tighter
         const zoneSize = heatmapSize - (padding * 2);
         const zoneStartX = x + padding;
         const zoneStartY = y + padding;
