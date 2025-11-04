@@ -52,6 +52,7 @@ class BaseballChartingApp {
         this.setupEventListeners();
         this.initializeHandedness();
         this.updateStatus();
+        this.updateTableHeaders();
     }
     
     setupEventListeners() {
@@ -1054,9 +1055,42 @@ class BaseballChartingApp {
         this.applyGradeColor(scoreGradeElement, overallGrade.class);
     }
     
+    updateTableHeaders() {
+        // Update table headers dynamically
+        const tableHeader = document.querySelector('thead tr');
+        if (tableHeader) {
+            const headers = tableHeader.querySelectorAll('th');
+            if (headers.length >= 5) {
+                // Update header texts
+                if (headers[0]) headers[0].textContent = 'Pitch';
+                if (headers[1]) headers[1].textContent = 'Count';
+                if (headers[2]) headers[2].textContent = 'Avg Score';
+                // Add Avg Miss header if it doesn't exist
+                if (headers.length === 4) {
+                    // Insert Avg Miss header after Avg Score
+                    const avgMissHeader = document.createElement('th');
+                    avgMissHeader.textContent = 'Avg Miss';
+                    headers[2].after(avgMissHeader);
+                } else if (headers[3]) {
+                    headers[3].textContent = 'Avg Miss';
+                }
+                if (headers[4]) headers[4].textContent = 'Grade';
+                // Remove Freq C Zone and Freq P Loc. headers if they exist
+                if (headers.length > 5) {
+                    // Remove headers 5 and 6 (Freq C Zone and Freq P Loc.)
+                    for (let i = headers.length - 1; i >= 5; i--) {
+                        if (headers[i]) {
+                            headers[i].remove();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     updateCommandBreakdown() {
         if (this.pitchHistory.length === 0) {
-            this.breakdownTableBody.innerHTML = '<tr><td colspan="6" class="no-data">No pitches recorded yet</td></tr>';
+            this.breakdownTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No pitches recorded yet</td></tr>';
             return;
         }
         
@@ -1111,26 +1145,6 @@ class BaseballChartingApp {
                 class: this.getScoreClass(safeAvgScore)
             };
             
-            // Calculate most common zones for catcher and pitch locations
-            const catcherZones = {};
-            const pitchZones = {};
-            
-            group.pitches.forEach(pitch => {
-                const catcherZone = pitch.catcherGlove.zone;
-                const pitchZone = pitch.ballLocation.zone;
-                
-                catcherZones[catcherZone] = (catcherZones[catcherZone] || 0) + 1;
-                pitchZones[pitchZone] = (pitchZones[pitchZone] || 0) + 1;
-            });
-            
-            // Find most common zones
-            const mostCommonCatcherZone = Object.keys(catcherZones).reduce((a, b) => 
-                catcherZones[a] > catcherZones[b] ? a : b
-            );
-            const mostCommonPitchZone = Object.keys(pitchZones).reduce((a, b) => 
-                pitchZones[a] > pitchZones[b] ? a : b
-            );
-            
             tableHTML += `
                 <tr>
                     <td class="pitch-type-cell">
@@ -1139,9 +1153,8 @@ class BaseballChartingApp {
                     </td>
                     <td>${group.pitches.length}</td>
                     <td>${safeAvgScore.toFixed(1)}/10</td>
+                    <td>${safeAvgDistance.toFixed(1)}"</td>
                     <td class="command-grade-cell ${grade.class}">${grade.grade}</td>
-                    <td>${mostCommonCatcherZone}</td>
-                    <td>${mostCommonPitchZone}</td>
                 </tr>
             `;
         });
@@ -1341,7 +1354,7 @@ class BaseballChartingApp {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 22px Arial';
-        ctx.fillText(`Overall: ${roundedAvgScore}/10 - ${gradeText}`, 50, rowY);
+        ctx.fillText(`Overall: ${roundedAvgScore}/10`, 50, rowY);
         
         // Pitcher name (black, centered)
         ctx.textAlign = 'center';
@@ -1360,7 +1373,7 @@ class BaseballChartingApp {
         
         // Removed stats box; overall shown in top left
         
-        // Draw pitch type heatmaps higher up
+        // Draw pitch type heatmaps
         this.drawPitchTypeHeatmaps(ctx, 50, 150);
         
         // Calculate position for breakdown table based on heatmap layout
@@ -1371,9 +1384,10 @@ class BaseballChartingApp {
         
         // Calculate how many pitch types fit per row horizontally (use fixed sizing here
         // to avoid scope issues with drawPitchTypeHeatmaps' internals)
+        // Note: drawPitchTypeHeatmaps uses startX = 50, so we match that here
         const canvasWidth = 1650;
-        const startX = 32;
-        const availableWidth = canvasWidth - (startX * 2);
+        const heatmapStartX = 50; // Match the startX used in drawPitchTypeHeatmaps call
+        const availableWidth = canvasWidth - (heatmapStartX * 2);
         const HEATMAP_SIZE = 250;
         const TITLE_HEIGHT = 50;
         const PAIR_GAP = 2; // gap within a pitch type pair
@@ -1391,21 +1405,59 @@ class BaseballChartingApp {
         const heatmapStartY = 150; // Starting Y position for heatmaps
         const totalHeatmapHeight = heatmapStartY + numRows * (heatmapHeight + heatmapTitleHeight + SPACING_Y);
         
-        const tableStartY = totalHeatmapHeight + 50; // Start table below heatmaps with 50px gap
-        
-        // Draw breakdown table (bottom, centered) - positioned after heatmaps
-        this.drawBreakdownTable(ctx, 475, tableStartY, 700); // Centered: (1650-700)/2 = 475
+        // Position table based on number of pitch types
+        if (numPitchTypes === 4 || numPitchTypes === 5) {
+            // For exactly 4 or 5 pitch types, position table to the right of heatmaps
+            // Calculate where the last heatmap pair ends horizontally
+            const lastCol = (numPitchTypes - 1) % pairsPerRow;
+            const lastPairX = heatmapStartX + lastCol * pairWidth;
+            const lastPairRightEdge = lastPairX + (HEATMAP_SIZE * 2) + PAIR_GAP;
+            
+            // Calculate Y position of the last row (align table with last row of heatmaps)
+            const lastRow = Math.floor((numPitchTypes - 1) / pairsPerRow);
+            const lastRowY = heatmapStartY + lastRow * (heatmapHeight + heatmapTitleHeight + SPACING_Y);
+            
+            // Position table to the right of the last heatmap with some spacing
+            const tableX = lastPairRightEdge + 20; // 20px spacing from last heatmap
+            const tableY = lastRowY; // Align with the last row of heatmaps
+            
+            // Check if table fits on the right side
+            const tableWidth = 550;
+            if (tableX + tableWidth <= canvasWidth - 20) {
+                // Draw table to the right of heatmaps
+                this.drawBreakdownTable(ctx, tableX, tableY, tableWidth);
+            } else {
+                // If it doesn't fit, fall back to below
+                const tableStartY = totalHeatmapHeight + 50;
+                this.drawBreakdownTable(ctx, 550, tableStartY, tableWidth);
+            }
+        } else {
+            // For other numbers of pitch types, position table below heatmaps (centered)
+            const tableStartY = totalHeatmapHeight + 50; // Start table below heatmaps with 50px gap
+            this.drawBreakdownTable(ctx, 550, tableStartY, 550); // Centered: (1650-550)/2 = 550
+        }
         
         // Helper to trigger download
         const triggerDownload = (href) => {
-            const link = document.createElement('a');
-            link.setAttribute('href', href);
-            const fileName = pitcherName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            link.setAttribute('download', `${fileName}_command_report_${new Date().toISOString().split('T')[0]}.png`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            try {
+                const link = document.createElement('a');
+                link.setAttribute('href', href);
+                const fileName = pitcherName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                link.setAttribute('download', `${fileName}_command_report_${new Date().toISOString().split('T')[0]}.png`);
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                // Use setTimeout to ensure the link is in the DOM before clicking
+                setTimeout(() => {
+                    link.click();
+                    // Remove link after a delay to ensure download starts
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                    }, 100);
+                }, 10);
+            } catch (e) {
+                console.error('Error triggering download:', e);
+                alert('Error downloading PNG. Please try right-clicking the image and saving it manually.');
+            }
         };
 
         // Convert to image and download as PNG (robust across browsers)
@@ -1415,7 +1467,8 @@ class BaseballChartingApp {
                     if (blob) {
                         const url = URL.createObjectURL(blob);
                         triggerDownload(url);
-                        URL.revokeObjectURL(url);
+                        // Don't revoke immediately - let download complete first
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
                     } else {
                         // Fallback if blob is null
                         const dataUrl = reportCanvas.toDataURL('image/png');
@@ -1427,6 +1480,8 @@ class BaseballChartingApp {
                 triggerDownload(dataUrl);
             }
         } catch (e) {
+            console.error('Error generating PNG:', e);
+            alert('Error generating PNG report. Please try again.');
             const dataUrl = reportCanvas.toDataURL('image/png');
             triggerDownload(dataUrl);
         }
@@ -1680,12 +1735,12 @@ class BaseballChartingApp {
             pitchGroups[pitch.pitchType].pitches.push(pitch);
         });
         
-        // Table dimensions - accommodate wider last columns
-        const tableWidth = 700; // Adjusted width for better spacing
+        // Table dimensions - tighter spacing to reduce dead space
+        const tableWidth = 550; // Reduced width to eliminate dead space
         const rowHeight = 35;
         const headerHeight = 45;
-        // Adjusted column widths for 6 columns - more space for last two columns
-        const colWidths = [120, 60, 100, 140, 140, 140]; // More space for last two columns
+        // Adjusted column widths for 5 columns - tighter fit
+        const colWidths = [110, 55, 95, 95, 95]; // Updated for 5 columns with tighter spacing
         
         // Draw table background
         ctx.fillStyle = '#ffffff';
@@ -1703,8 +1758,12 @@ class BaseballChartingApp {
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
         
-        const headers = ['Pitch Type', 'Count', 'Avg Score', 'Command Grade', 'Frequent C Zone', 'Frequent P Loc.'];
-        let currentX = x;
+        // Calculate total column width and offset to center columns within table
+        const totalColumnWidth = colWidths.reduce((sum, width) => sum + width, 0);
+        const contentOffsetX = (tableWidth - totalColumnWidth) / 2;
+        
+        const headers = ['Pitch', 'Count', 'Avg Score', 'Avg Miss', 'Grade'];
+        let currentX = x + contentOffsetX; // Apply offset to center columns
         headers.forEach((header, i) => {
             ctx.fillText(header, currentX + colWidths[i] / 2, y + 28);
             currentX += colWidths[i];
@@ -1735,27 +1794,10 @@ class BaseballChartingApp {
             const safeBestDistance = isNaN(bestDistance) || !isFinite(bestDistance) ? 0 : bestDistance;
             const safeWorstDistance = isNaN(worstDistance) || !isFinite(worstDistance) ? 0 : worstDistance;
             
-            const grade = this.getDistanceScore(safeAvgDistance);
-            
-            // Calculate most common zones for catcher and pitch locations
-            const catcherZones = {};
-            const pitchZones = {};
-            
-            group.pitches.forEach(pitch => {
-                const catcherZone = pitch.catcherGlove.zone;
-                const pitchZone = pitch.ballLocation.zone;
-                
-                catcherZones[catcherZone] = (catcherZones[catcherZone] || 0) + 1;
-                pitchZones[pitchZone] = (pitchZones[pitchZone] || 0) + 1;
-            });
-            
-            // Find most common zones
-            const mostCommonCatcherZone = Object.keys(catcherZones).reduce((a, b) => 
-                catcherZones[a] > catcherZones[b] ? a : b
-            );
-            const mostCommonPitchZone = Object.keys(pitchZones).reduce((a, b) => 
-                pitchZones[a] > pitchZones[b] ? a : b
-            );
+            const grade = {
+                grade: this.getScoreGrade(safeAvgScore),
+                class: this.getScoreClass(safeAvgScore)
+            };
             
             // Draw row background
             ctx.fillStyle = '#f9f9f9';
@@ -1770,12 +1812,20 @@ class BaseballChartingApp {
                 group.name,
                 group.pitches.length.toString(),
                 `${safeAvgScore.toFixed(1)}/10`,
-                grade.grade,
-                mostCommonCatcherZone,
-                mostCommonPitchZone
+                `${safeAvgDistance.toFixed(1)}"`,
+                grade.grade
             ];
             
-            currentX = x;
+            // Grade colors for PNG
+            const gradeColors = {
+                'excellent': '#00ff00',  // Green
+                'good': '#0066ff',       // Blue
+                'average': '#b8860b',     // Dark Goldenrod (darker yellow for visibility)
+                'fair': '#ff8800',       // Orange
+                'poor': '#ff0000'        // Red
+            };
+            
+            currentX = x + contentOffsetX; // Apply offset to center columns
             rowData.forEach((data, i) => {
                 if (i === 0) {
                     // For pitch type column, draw colored dot + text (CENTERED)
@@ -1796,6 +1846,12 @@ class BaseballChartingApp {
                     ctx.fillStyle = '#000';
                     ctx.textAlign = 'center';
                     ctx.fillText(data, centerX, currentY + 22);
+                } else if (i === 4) {
+                    // Grade column - color based on grade class
+                    const gradeColor = gradeColors[grade.class] || '#000000';
+                    ctx.fillStyle = gradeColor;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(data, currentX + colWidths[i] / 2, currentY + 22);
                 } else {
                     // Regular text for other columns
                     ctx.fillStyle = '#000';
@@ -2002,8 +2058,8 @@ class BaseballChartingApp {
         ctx.textAlign = 'center';
         ctx.fillText(title, x + heatmapSize / 2, y - 3);
         
-        // Draw background structure - reduced outer padding
-        const padding = 10; // Reduced padding so pair gap looks tighter
+        // Draw background structure with more shadow zone for outside pitches
+        const padding = 10; // Outer padding
         const zoneSize = heatmapSize - (padding * 2);
         const zoneStartX = x + padding;
         const zoneStartY = y + padding;
@@ -2017,8 +2073,8 @@ class BaseballChartingApp {
         ctx.lineWidth = 2;
         ctx.strokeRect(zoneStartX, zoneStartY, zoneSize, zoneSize);
         
-        // Draw inner strike zone (9-box area) - proportional padding
-        const innerPadding = 10; // Minimal padding for compact layout
+        // Draw inner strike zone (9-box area) - increased padding for shadow zone
+        const innerPadding = 30; // Increased padding to show pitches outside the zone
         const innerZoneSize = zoneSize - (innerPadding * 2);
         const innerZoneX = zoneStartX + innerPadding;
         const innerZoneY = zoneStartY + innerPadding;
@@ -2114,26 +2170,39 @@ class BaseballChartingApp {
     
     convertActualCoordsToHeatmap(ballLocation, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize) {
         // Convert actual x,y coordinates to heatmap grid coordinates
-        const zoneRow = Math.floor((ballLocation.zone - 1) / 3);
-        const zoneCol = (ballLocation.zone - 1) % 3;
+        // Handle invalid zones by defaulting to zone 5 (center)
+        let zone = ballLocation.zone;
+        if (isNaN(zone) || zone < 1 || zone > 9) {
+            zone = 5; // Default to center zone for invalid zones
+        }
+        
+        const zoneRow = Math.floor((zone - 1) / 3);
+        const zoneCol = (zone - 1) % 3;
         
         // Calculate the actual position within the heatmap using the same logic as the main plot
         const boxSize = (innerZoneSize - 4) / 3; // Account for 2px gaps
         const gap = 2;
         
-        // Convert relative position (0-100) to actual pixel position within the zone
+        // Convert relative position to actual pixel position within the zone
+        // Allow values outside 0-100 for pitches outside the zone boundaries
         const relativeX = ballLocation.x / 100;
         const relativeY = ballLocation.y / 100;
         
         // Calculate the actual pixel position in the heatmap
+        // Allow positions to extend beyond zone boundaries for outside pitches
         const actualX = innerZoneX + zoneCol * (boxSize + gap) + relativeX * boxSize;
         const actualY = innerZoneY + zoneRow * (boxSize + gap) + relativeY * boxSize;
         
         // Convert to heatmap grid coordinates (scale to full zone area, not just inner zone)
+        // This allows pitches outside the inner zone to be visible in the shadow zone
         const gridX = (actualX - zoneStartX) / zoneSize * gridSize;
         const gridY = (actualY - zoneStartY) / zoneSize * gridSize;
         
-        return { x: gridX, y: gridY };
+        // Clamp to grid boundaries to prevent array out of bounds
+        return { 
+            x: Math.max(0, Math.min(gridSize - 1, gridX)), 
+            y: Math.max(0, Math.min(gridSize - 1, gridY))
+        };
     }
     
     convertToHeatmapCoords(ballLocation, gridSize) {
