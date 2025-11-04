@@ -2042,7 +2042,7 @@ class BaseballChartingApp {
         return { x: canvasX, y: canvasY };
     }
     
-    drawHeatmap(ctx, x, y, title, pitches, locationType = 'ball', customSize = null, titleColor = null) {
+    drawHeatmap(ctx, x, y, title, pitches, locationType = 'ball', customSize = null, pitchColor = null) {
         ctx.save();
         
         if (pitches.length === 0) {
@@ -2053,7 +2053,7 @@ class BaseballChartingApp {
         const heatmapSize = customSize || 300; // Allow caller to control size
         
         // Draw title
-        ctx.fillStyle = titleColor || '#000';
+        ctx.fillStyle = pitchColor || '#000';
         ctx.font = 'bold 14px Arial'; // Smaller font for compact layout
         ctx.textAlign = 'center';
         ctx.fillText(title, x + heatmapSize / 2, y - 3);
@@ -2083,61 +2083,56 @@ class BaseballChartingApp {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(innerZoneX, innerZoneY, innerZoneSize, innerZoneSize);
         
-        // Create density grid (100x100 for smoother heatmap)
-        const gridSize = 100;
-        const densityGrid = Array(gridSize).fill().map(() => Array(gridSize).fill(0));
-        
-        // Convert pitch positions to heatmap coordinates using actual x,y coordinates
-        pitches.forEach(pitch => {
-            // Use the location type to determine which position to plot
+        // Convert pitch positions to canvas coordinates
+        const positions = pitches.map(pitch => {
             const positionData = locationType === 'catcher' ? pitch.catcherGlove : pitch.ballLocation;
-            const ballPos = this.convertActualCoordsToHeatmap(positionData, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize);
-            
-            // Create density blobs with Gaussian effect - adjusted for compact heatmap
-            const radius = 8; // Radius for smooth blobs
-            const intensity = 1;
-            const sigma = 3; // Spread for smooth gradients
-            
-            for (let dy = -radius; dy <= radius; dy++) {
-                for (let dx = -radius; dx <= radius; dx++) {
-                    const gridX = Math.floor(ballPos.x) + dx;
-                    const gridY = Math.floor(ballPos.y) + dy;
-                    
-                    if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        const weight = Math.exp(-distance * distance / (2 * sigma * sigma)) * intensity;
-                        densityGrid[gridY][gridX] += weight;
-                    }
-                }
-            }
+            return this.convertPositionToCanvas(positionData, innerZoneX, innerZoneY, innerZoneSize);
         });
         
-        // Find max density for normalization
-        let maxDensity = 0;
-        for (let row of densityGrid) {
-            for (let cell of row) {
-                maxDensity = Math.max(maxDensity, cell);
-            }
-        }
-        
-        // Draw heatmap with smooth blobs across the entire zone area
-        const cellSize = zoneSize / gridSize; // Use full zone size
-        for (let row = 0; row < gridSize; row++) {
-            for (let col = 0; col < gridSize; col++) {
-                const density = densityGrid[row][col];
-                if (density > 0.01) { // Show lower-level density for smooth gradients
-                    const intensity = Math.min(density / maxDensity, 1);
-                    const color = this.getHeatmapColor(intensity);
-                    
-                    ctx.fillStyle = color;
-                    ctx.fillRect(
-                        zoneStartX + col * cellSize,
-                        zoneStartY + row * cellSize,
-                        cellSize,
-                        cellSize
-                    );
-                }
-            }
+        if (positions.length > 0) {
+            // Calculate average position (center dot)
+            const avgX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;
+            const avgY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
+            
+            // Calculate standard deviations for ellipse dimensions
+            const varianceX = positions.reduce((sum, p) => sum + Math.pow(p.x - avgX, 2), 0) / positions.length;
+            const varianceY = positions.reduce((sum, p) => sum + Math.pow(p.y - avgY, 2), 0) / positions.length;
+            const stdDevX = Math.sqrt(varianceX);
+            const stdDevY = Math.sqrt(varianceY);
+            
+            // Calculate ellipse dimensions (use 2 standard deviations for 95% coverage)
+            const ellipseWidth = Math.max(stdDevX * 2, 10); // Minimum 10px width
+            const ellipseHeight = Math.max(stdDevY * 2, 10); // Minimum 10px height
+            
+            // Use pitch color for ellipse, default to blue if not provided
+            const ellipseColor = pitchColor || '#0066ff';
+            
+            // Draw translucent ellipse
+            ctx.save();
+            ctx.globalAlpha = 0.3; // Semi-transparent
+            ctx.fillStyle = ellipseColor;
+            ctx.beginPath();
+            ctx.ellipse(avgX, avgY, ellipseWidth, ellipseHeight, 0, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.restore();
+            
+            // Draw ellipse border
+            ctx.strokeStyle = ellipseColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(avgX, avgY, ellipseWidth, ellipseHeight, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+            
+            // Draw center dot (average position)
+            ctx.fillStyle = ellipseColor;
+            ctx.beginPath();
+            ctx.arc(avgX, avgY, 4, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw center dot border
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
         }
         
         // Draw zone boxes with gaps to match main page EXACTLY
@@ -2148,8 +2143,6 @@ class BaseballChartingApp {
             for (let col = 0; col < 3; col++) {
                 const boxX = innerZoneX + col * (boxSize + gap);
                 const boxY = innerZoneY + row * (boxSize + gap);
-                
-                // Don't draw box background - let heatmap show through
                 
                 // Draw box border (black for PDF)
                 ctx.strokeStyle = '#000000';
@@ -2166,6 +2159,32 @@ class BaseballChartingApp {
         }
         
         ctx.restore();
+    }
+    
+    convertPositionToCanvas(positionData, innerZoneX, innerZoneY, innerZoneSize) {
+        // Handle invalid zones by defaulting to zone 5 (center)
+        let zone = positionData.zone;
+        if (isNaN(zone) || zone < 1 || zone > 9) {
+            zone = 5; // Default to center zone for invalid zones
+        }
+        
+        const zoneRow = Math.floor((zone - 1) / 3);
+        const zoneCol = (zone - 1) % 3;
+        
+        // Calculate the actual position within the zone
+        const boxSize = (innerZoneSize - 4) / 3; // Account for 2px gaps
+        const gap = 2;
+        
+        // Convert relative position to actual pixel position within the zone
+        // Allow values outside 0-100 for pitches outside the zone boundaries
+        const relativeX = positionData.x / 100;
+        const relativeY = positionData.y / 100;
+        
+        // Calculate the actual pixel position in the canvas
+        const canvasX = innerZoneX + zoneCol * (boxSize + gap) + relativeX * boxSize;
+        const canvasY = innerZoneY + zoneRow * (boxSize + gap) + relativeY * boxSize;
+        
+        return { x: canvasX, y: canvasY };
     }
     
     convertActualCoordsToHeatmap(ballLocation, innerZoneX, innerZoneY, innerZoneSize, gridSize, zoneStartX, zoneStartY, zoneSize) {
