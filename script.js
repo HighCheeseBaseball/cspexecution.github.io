@@ -51,6 +51,7 @@ class BaseballChartingApp {
         
         this.setupEventListeners();
         this.initializeHandedness();
+        this.updatePitchTypeButtonText();
         this.updateStatus();
         this.updateTableHeaders();
     }
@@ -421,10 +422,21 @@ class BaseballChartingApp {
         });
     }
     
+    updatePitchTypeButtonText() {
+        // Update pitch type button text based on data-pitch attribute
+        this.pitchTypeButtons.forEach(btn => {
+            const pitchCode = btn.dataset.pitch;
+            if (pitchCode) {
+                const pitchName = this.getPitchTypeName(pitchCode);
+                btn.textContent = pitchName;
+            }
+        });
+    }
+    
     getPitchTypeName(code) {
         const pitchTypes = {
             'FS': 'Four-Seam',
-            'CH': 'ChangeUp',
+            'CH': 'Change',
             'CB': 'Curveball',
             'CT': 'Cutter',
             'KN': 'Knuckleball',
@@ -1061,20 +1073,34 @@ class BaseballChartingApp {
         if (tableHeader) {
             const headers = tableHeader.querySelectorAll('th');
             if (headers.length >= 5) {
-                // Update header texts
-                if (headers[0]) headers[0].textContent = 'Pitch';
-                if (headers[1]) headers[1].textContent = 'Count';
-                if (headers[2]) headers[2].textContent = 'Avg Score';
+                // Update header texts and center them
+                if (headers[0]) {
+                    headers[0].textContent = 'Pitch';
+                    headers[0].style.textAlign = 'center';
+                }
+                if (headers[1]) {
+                    headers[1].textContent = 'Count';
+                    headers[1].style.textAlign = 'center';
+                }
+                if (headers[2]) {
+                    headers[2].textContent = 'Avg Score';
+                    headers[2].style.textAlign = 'center';
+                }
                 // Add Avg Miss header if it doesn't exist
                 if (headers.length === 4) {
                     // Insert Avg Miss header after Avg Score
                     const avgMissHeader = document.createElement('th');
                     avgMissHeader.textContent = 'Avg Miss';
+                    avgMissHeader.style.textAlign = 'center';
                     headers[2].after(avgMissHeader);
                 } else if (headers[3]) {
                     headers[3].textContent = 'Avg Miss';
+                    headers[3].style.textAlign = 'center';
                 }
-                if (headers[4]) headers[4].textContent = 'Grade';
+                if (headers[4]) {
+                    headers[4].textContent = 'Grade';
+                    headers[4].style.textAlign = 'center';
+                }
                 // Remove Freq C Zone and Freq P Loc. headers if they exist
                 if (headers.length > 5) {
                     // Remove headers 5 and 6 (Freq C Zone and Freq P Loc.)
@@ -1084,6 +1110,12 @@ class BaseballChartingApp {
                         }
                     }
                 }
+                
+                // Ensure all headers are centered (re-query to include any newly added headers)
+                const allHeaders = tableHeader.querySelectorAll('th');
+                allHeaders.forEach(header => {
+                    header.style.textAlign = 'center';
+                });
             }
         }
     }
@@ -1421,15 +1453,23 @@ class BaseballChartingApp {
             const tableX = lastPairRightEdge + 20; // 20px spacing from last heatmap
             const tableY = lastRowY; // Align with the last row of heatmaps
             
-            // Check if table fits on the right side
+            // Check if table fits on the right side (with reduced right margin for 5 pitch types)
             const tableWidth = 550;
-            if (tableX + tableWidth <= canvasWidth - 20) {
+            const rightMargin = numPitchTypes === 5 ? 10 : 20; // Tighter margin for 5 pitch types
+            if (tableX + tableWidth <= canvasWidth - rightMargin) {
                 // Draw table to the right of heatmaps
                 this.drawBreakdownTable(ctx, tableX, tableY, tableWidth);
             } else {
-                // If it doesn't fit, fall back to below
-                const tableStartY = totalHeatmapHeight + 50;
-                this.drawBreakdownTable(ctx, 550, tableStartY, tableWidth);
+                // If it doesn't fit, try reducing spacing first
+                const reducedSpacingX = lastPairRightEdge + 10; // Try 10px spacing instead
+                if (reducedSpacingX + tableWidth <= canvasWidth - 10) {
+                    // Draw table with reduced spacing
+                    this.drawBreakdownTable(ctx, reducedSpacingX, tableY, tableWidth);
+                } else {
+                    // If it still doesn't fit, fall back to below
+                    const tableStartY = totalHeatmapHeight + 50;
+                    this.drawBreakdownTable(ctx, 550, tableStartY, tableWidth);
+                }
             }
         } else {
             // For other numbers of pitch types, position table below heatmaps (centered)
@@ -1847,11 +1887,13 @@ class BaseballChartingApp {
                     ctx.textAlign = 'center';
                     ctx.fillText(data, centerX, currentY + 22);
                 } else if (i === 4) {
-                    // Grade column - color based on grade class
+                    // Grade column - color based on grade class and make it bold
                     const gradeColor = gradeColors[grade.class] || '#000000';
                     ctx.fillStyle = gradeColor;
                     ctx.textAlign = 'center';
+                    ctx.font = 'bold 14px Arial'; // Bold font for grade
                     ctx.fillText(data, currentX + colWidths[i] / 2, currentY + 22);
+                    ctx.font = '14px Arial'; // Restore regular font
                 } else {
                     // Regular text for other columns
                     ctx.fillStyle = '#000';
