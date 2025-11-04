@@ -551,17 +551,17 @@ class BaseballChartingApp {
     }
     
     getBaseDistanceScore(distanceInches) {
-        // Original distance-based scoring
-        if (distanceInches <= 2.0) return 10;
-        if (distanceInches <= 4.0) return 9;
-        if (distanceInches <= 6.0) return 8;
-        if (distanceInches <= 8.0) return 7;
-        if (distanceInches <= 10.0) return 6;
-        if (distanceInches <= 12.0) return 5;
-        if (distanceInches <= 14.0) return 4;
-        if (distanceInches <= 16.0) return 3;
-        if (distanceInches <= 18.0) return 2;
-        return 1;
+        // Steeper distance-based scoring: reward precision more, penalize misses more harshly
+        if (distanceInches <= 1.0) return 10;  // Perfect command
+        if (distanceInches <= 2.0) return 9;  // Excellent
+        if (distanceInches <= 3.0) return 8;  // Very Good
+        if (distanceInches <= 4.0) return 7;  // Good
+        if (distanceInches <= 6.0) return 6;  // Above Average
+        if (distanceInches <= 8.0) return 5;  // Average
+        if (distanceInches <= 10.0) return 4; // Below Average
+        if (distanceInches <= 12.0) return 3; // Poor
+        if (distanceInches <= 15.0) return 2; // Very Poor
+        return 1; // Terrible
     }
     
     analyzeZonePlacement(catcherZone, ballZone, ballY = null) {
@@ -607,49 +607,50 @@ class BaseballChartingApp {
     getLHPAdjustment(pitchType, zoneAnalysis) {
         let adjustment = 0;
         
+        // Reduced directional bonuses - still recognize good misses but penalize misses more
         switch (pitchType) {
-            case 'FS': // Four-Seam: reward up misses
-                if (zoneAnalysis.isTop) adjustment += 1.5;
+            case 'FS': // Four-Seam: minimal reward for up misses
+                if (zoneAnalysis.isTop) adjustment += 0.5;
                 break;
                 
-            case 'SI': // Sinker: reward down misses AND inside to LHB (left side)
-                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+            case 'SI': // Sinker: minimal reward for down/inside misses
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 0.25;
                 break;
                 
-            case 'CT': // Cutter: reward right side misses (inside to RHB)
-                if (zoneAnalysis.isRight) adjustment += 1.5;
+            case 'CT': // Cutter: minimal reward for right side misses
+                if (zoneAnalysis.isRight) adjustment += 0.5;
                 break;
                 
-            case 'SL': // Slider: reward down and right misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+            case 'SL': // Slider: minimal reward for down/right, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3, 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'SW': // Sweeper: reward right and down misses
-                if (zoneAnalysis.isRight && zoneAnalysis.isBottom) adjustment += 2.0;
-                else if (zoneAnalysis.isRight || zoneAnalysis.isBottom) adjustment += 1.0;
+            case 'SW': // Sweeper: minimal reward for right/down misses
+                if (zoneAnalysis.isRight && zoneAnalysis.isBottom) adjustment += 0.5;
+                else if (zoneAnalysis.isRight || zoneAnalysis.isBottom) adjustment += 0.25;
                 break;
                 
-            case 'CB': // Curveball: reward down and right misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+            case 'CB': // Curveball: minimal reward for down/right, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'CH': // ChangeUp: reward down and left misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+            case 'CH': // ChangeUp: minimal reward for down/left, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'SP': // Splitter: reward down and left misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+            case 'SP': // Splitter: minimal reward for down/left, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
@@ -661,49 +662,50 @@ class BaseballChartingApp {
     getRHPAdjustment(pitchType, zoneAnalysis) {
         let adjustment = 0;
         
+        // Reduced directional bonuses - still recognize good misses but penalize misses more
         switch (pitchType) {
-            case 'FS': // Four-Seam: reward up misses
-                if (zoneAnalysis.isTop) adjustment += 1.5;
+            case 'FS': // Four-Seam: minimal reward for up misses
+                if (zoneAnalysis.isTop) adjustment += 0.5;
                 break;
                 
-            case 'SI': // Sinker: reward down misses AND inside to RHB (right side)
-                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+            case 'SI': // Sinker: minimal reward for down/inside misses
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 0.25;
                 break;
                 
-            case 'CT': // Cutter: reward left side misses (inside to LHB)
-                if (zoneAnalysis.isLeft) adjustment += 1.5;
+            case 'CT': // Cutter: minimal reward for left side misses
+                if (zoneAnalysis.isLeft) adjustment += 0.5;
                 break;
                 
-            case 'SL': // Slider: reward down and left misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+            case 'SL': // Slider: minimal reward for down/left, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'SW': // Sweeper: reward left and down misses
-                if (zoneAnalysis.isLeft && zoneAnalysis.isBottom) adjustment += 2.0;
-                else if (zoneAnalysis.isLeft || zoneAnalysis.isBottom) adjustment += 1.0;
+            case 'SW': // Sweeper: minimal reward for left/down misses
+                if (zoneAnalysis.isLeft && zoneAnalysis.isBottom) adjustment += 0.5;
+                else if (zoneAnalysis.isLeft || zoneAnalysis.isBottom) adjustment += 0.25;
                 break;
                 
-            case 'CB': // Curveball: reward down and left misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 1.0;
+            case 'CB': // Curveball: minimal reward for down/left, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isLeft) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isLeft) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'CH': // ChangeUp: reward down and right misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+            case 'CH': // ChangeUp: minimal reward for down/right, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
                 
-            case 'SP': // Splitter: reward down and right misses, penalty for upper half
-                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 2.0;
-                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 1.0;
+            case 'SP': // Splitter: minimal reward for down/right, penalty for upper half
+                if (zoneAnalysis.isBottom && zoneAnalysis.isRight) adjustment += 0.5;
+                else if (zoneAnalysis.isBottom || zoneAnalysis.isRight) adjustment += 0.25;
                 // Penalty for upper half (zones 1, 2, 3 OR upper half of zones 4, 5, 6)
                 if (zoneAnalysis.isUpperHalf) adjustment -= 1.0;
                 break;
@@ -1044,7 +1046,7 @@ class BaseballChartingApp {
         
         // Use the score from the distance-based grade (not average of individual scores)
         scoreValueElement.textContent = `${overallGrade.score}/10`;
-        scoreGradeElement.textContent = `Avg: ${safeAvgDistance.toFixed(1)}" - ${overallGrade.grade}`;
+        scoreGradeElement.textContent = `Avg: ${safeAvgDistance.toFixed(1)}"`;
         scoreGradeElement.className = `score-grade ${overallGrade.class}`;
         
         // Apply color styling to both score value and grade
@@ -1335,9 +1337,9 @@ class BaseballChartingApp {
         // Top info row: Overall (left), Pitcher Name (center), Date (right)
         const rowY = 100;
         
-        // Overall score (colored)
+        // Overall score (always black)
         ctx.textAlign = 'left';
-        ctx.fillStyle = gradeColor;
+        ctx.fillStyle = '#000000';
         ctx.font = 'bold 22px Arial';
         ctx.fillText(`Overall: ${roundedAvgScore}/10 - ${gradeText}`, 50, rowY);
         
